@@ -1,16 +1,30 @@
 <?php
 
-ini_set('display_errors',1);
-error_reporting(E_ALL);
+//ini_set( 'display_errors', 1 );
+//error_reporting( E_ALL );
+// HHVM BUG 無法偵測影片超過  max_post_size 問題，但此可以由前端操控（form）
+// 其實有一個困惑，為什麼一定要移到 temp folder 才能編輯？$_FILES的生命到底有多長？的生命到底有多長？
 
+
+// 主要  function extract_jpg( $target, $dist, $begin_time, $segment, $frames, $jpgsize )
+// 範例           extract_jpg( $target, $store, "00:00:00", "00:00:10", 25, "320x240" )
 $fileName = $_FILES["file"]["name"];
 $tempName = $_FILES["file"]["tmp_name"];
-$fileKey = explode(".", $fileName);
-$extension = end($fileKey);
-$videoPath = "upload/";
+$fileKey = explode( ".", $fileName );
+$type = end( $fileKey );
+$tempPath = "temp/";
+$outPath = "frames/";
+
+// 可調變的選項
+$store = "rbroke";
+$begin_time = "00:00:00";
+$segment = "00:00:10";
+$frames = 25;
+$jpgsize = "320x240";
 //var_dump($_FILES);
 
-function alert($result){
+
+function alert( $result ){
     
     echo "<meta http-equiv='content-type' content='text/html; charset=UTF-8'>";
     echo "<SCRIPT LANGUAGE='javascript'>";
@@ -22,18 +36,19 @@ function alert($result){
 }
 
 
-function check_file(){
+function check_file( $fileName ){
+
+    global $type;
     
-    global $extension;
+    $allowExts = array( "mkv", "mpeg", "mp4", "m4v" );
 
-    $allowExts = array("mkv", "mpeg", "mp4", "m4v");
-
-    if($_FILES["file"]["size"]==0){
+    if( $_FILES["file"]["size"]==0 ){
         
-        $result = "未選擇檔案";
+        $result = "未選擇檔案。( 或是超過伺服器 max_post_size )";
+        
         alert($result);
-        
-    }elseif(!in_array($extension, $allowExts)){
+
+    }elseif( !in_array( $type, $allowExts )){
         
         $response = array(
                 "result" => false,
@@ -45,7 +60,9 @@ function check_file(){
         
     }else{
         
-        check_folder();
+        
+        global $tempPath;
+        check_folder( $tempPath );
         
         $response = array(
                 "result" => true,
@@ -59,35 +76,34 @@ function check_file(){
 };
 
 
-function check_folder()
+function check_folder( $folder )
 {
-    global $videoPath;
     
-    if(!file_exists($videoPath)){
+    if( !file_exists( $folder ) ){
         
-        mkdir($videoPath, 0755, true);
+        mkdir( $folder, 0755, true );
     
     }
 };
 
 
-function extract_jpg($out)
+function extract_jpg( $target, $dist, $begin_time, $segment, $frames, $jpgsize )
 {
     
-//暫時寫死切割時間與片段以及輸出frames數
-    global $fileName;    
+    global $outPath;
+    $Path = $outPath . "/" . $dist;
+    check_folder( $Path );
     
-    $begin_time = "00:00:00";
-    $segment = "00:00:00.20";
-    $target = $out;
-    $frames = "25";
-    $interval = 5;
-    $size = '320x240';
-    $image = $fileName . ".%4d.jpg";
+    $cmd = "cd $Path && ffmpeg -i ../../$target -ss $begin_time -t $segment -r $frames -s $jpgsize $dist.'%4d.jpg' ";   
+//    $cmd = "ffmpeg -i $target -ss $begin_time -t $segment -r $frames -s $jpgsizeb -an $Path/$dist%4d.jpgs ";   
+
+    shell_exec( $cmd );
     
-    $cmd = "ffmpeg -i $target -ss $begin_time -t $segment -r 15 -s $size $image";   
-    
-    shell_exec($cmd);
+    // 弔詭的無效！！！？ 只好用蠢方法...先移到 folder 再切割
+//    foreach (glob("*.jpg") as $filename) {
+//        move_uploaded_file( $filename, $Path );
+//        echo "$filename size " . filesize($filename) . "\n<pre>" ;
+//    }
     
     $response = array(
                 "result" => true,
@@ -100,31 +116,34 @@ function extract_jpg($out)
 };
 
 
-function move_file()
+function save_temp_file( $tempPath )
 {
     
-    global $extension, $videoPath, $tempName;
+    global $type, $tempName;
     
-    $out = $videoPath . rand() . "." . $extension;
+    $move_result = $tempPath . rand() . "." . $type;
     
-    move_uploaded_file($tempName, $out);
+    move_uploaded_file( $tempName, $move_result );
     
-    return $out;
+    return $move_result;
 
 }
 
 
-if (check_file()["result"] && $_FILES['file']['error'] === UPLOAD_ERR_OK) { 
+if ( check_file( $fileName )["result"] && $_FILES['file']['error'] === UPLOAD_ERR_OK ) { 
     
-    $out = move_file();
+    $target = save_temp_file( $tempPath );
     
-    alert(extract_jpg($out)["message"]);
+    $result = extract_jpg( $target, $store, $begin_time, $segment, $frames, $jpgsize )["message"];
+    
     
 } else { 
-    
-    alert(check_file()["message"]);
+
+    $result = check_file( $fileName )["message"];
 
 } 
+
+alert( $result );
 
 
 ?>
