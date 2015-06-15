@@ -2,26 +2,29 @@
 
 //ini_set( 'display_errors', 1 );
 //error_reporting( E_ALL );
+//var_dump($_FILES);
+
 // HHVM BUG 無法偵測影片超過  max_post_size 問題，但此可以由前端操控（form）
 // 其實有一個困惑，為什麼一定要移到 temp folder 才能編輯？$_FILES的生命到底有多長？的生命到底有多長？
 
-
-// 主要  function extract_jpg( $target, $dist, $begin_time, $segment, $frames, $jpgsize )
-// 範例           extract_jpg( $target, $store, "00:00:00", "00:00:10", 25, "320x240" )
+// 主要 function extract_jpg( $target, $dist, $begin_time, $segment, $frames, $jpgsize )
+// 範例          extract_jpg( $target, $store, "00:00:00", "00:00:10", 25, "320x240" )
+// 必裝 Tool: ffmpeg.
 $fileName = $_FILES["file"]["name"];
 $tempName = $_FILES["file"]["tmp_name"];
 $fileKey = explode( ".", $fileName );
 $type = end( $fileKey );
 $tempPath = "temp/";
 $outPath = "frames/";
-
+$trainPath = "train/";
+$validPath = "valid/";
 // 可調變的選項
 $store = "rbroke";
 $begin_time = "00:00:00";
 $segment = "00:00:10";
 $frames = 25;
 $jpgsize = "320x240";
-//var_dump($_FILES);
+$range = 15;
 
 
 function alert( $result ){
@@ -60,7 +63,6 @@ function check_file( $fileName ){
         
     }else{
         
-        
         global $tempPath;
         check_folder( $tempPath );
         
@@ -90,20 +92,23 @@ function check_folder( $folder )
 function extract_jpg( $target, $dist, $begin_time, $segment, $frames, $jpgsize )
 {
     
-    global $outPath;
-    $Path = $outPath . "/" . $dist;
-    check_folder( $Path );
+    global $trainPath, $validPath, $range;
+    $tPath = $trainPath . $dist . "/";
+    $vPath = $validPath . $dist . "/";
+    check_folder( $tPath );
+    check_folder( $vPath );
     
-    $cmd = "cd $Path && ffmpeg -i ../../$target -ss $begin_time -t $segment -r $frames -s $jpgsize $dist.'%4d.jpg' ";   
-//    $cmd = "ffmpeg -i $target -ss $begin_time -t $segment -r $frames -s $jpgsizeb -an $Path/$dist%4d.jpgs ";   
+//    $cmd = "cd $Path && ffmpeg -i ../../$target -ss $begin_time -t $segment -r $frames -s $jpgsize $dist.'%4d.jpg' ";   
+    $cmd = "ffmpeg -i $target -ss $begin_time -t $segment -r $frames -s $jpgsize $dist%3d.jpg";   
 
     shell_exec( $cmd );
-    
-    // 弔詭的無效！！！？ 只好用蠢方法...先移到 folder 再切割
-//    foreach (glob("*.jpg") as $filename) {
-//        move_uploaded_file( $filename, $Path );
-//        echo "$filename size " . filesize($filename) . "\n<pre>" ;
-//    }
+
+    $count = 0;
+    foreach (glob("*.jpg") as $filename) {
+        $Path = ( $count++ % $range ) ? $tPath : $vPath; 
+        rename( $filename, $Path."/".$filename );  
+//        echo $Path . "\n<pre>" ;
+    }
     
     $response = array(
                 "result" => true,
@@ -143,6 +148,7 @@ if ( check_file( $fileName )["result"] && $_FILES['file']['error'] === UPLOAD_ER
 
 } 
 
+unlink( $target );
 alert( $result );
 
 
